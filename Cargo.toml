@@ -1,0 +1,13 @@
+[package]
+authors = ["Zeyi Fan <github@zeyi.fan>"]
+edition = "2018"
+name = "prjfs-rs"
+version = "0.1.0"
+
+[dependencies]
+anyhow = "*"
+
+[dependencies.winapi]
+features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug"]
+git = "https://github.com/fanzeyi/winapi-rs"
+branch = "projectedfslib"
