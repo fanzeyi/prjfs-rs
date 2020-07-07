@@ -26,7 +26,7 @@ pub fn guid_from_bytes(bytes: Vec<u8>) -> std::result::Result<GUID, std::option:
     })
 }
 
-pub fn guid_to_bytes(guid: GUID) -> Vec<u8> {
+pub fn guid_to_bytes(guid: &GUID) -> Vec<u8> {
     [
         &guid.Data1.to_be_bytes()[..],
         &guid.Data2.to_be_bytes(),

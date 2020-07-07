@@ -7,17 +7,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85bb70cc08ec97ca5450e6eba421deeea5f172c0fc61f78b5357b2a8e8be195f"
 
 [[package]]
+name = "cfg-if"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
+
+[[package]]
+name = "log"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14b6052be84e6b71ab17edffc2eeabf5c2c3ae1fdb464aae35ac50c67a44e1f7"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "prjfs-rs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "log",
  "winapi",
 ]
 
 [[package]]
 name = "winapi"
 version = "0.3.8"
-source = "git+https://github.com/fanzeyi/winapi-rs?branch=projectedfslib#51f3b72639c50e220626a8f101870edd09a81778"
 dependencies = [
  "winapi-i686-pc-windows-gnu",
  "winapi-x86_64-pc-windows-gnu",
@@ -26,9 +41,7 @@ dependencies = [
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
-source = "git+https://github.com/fanzeyi/winapi-rs?branch=projectedfslib#51f3b72639c50e220626a8f101870edd09a81778"
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
-source = "git+https://github.com/fanzeyi/winapi-rs?branch=projectedfslib#51f3b72639c50e220626a8f101870edd09a81778"

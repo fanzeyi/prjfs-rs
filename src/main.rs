@@ -6,9 +6,11 @@ use winapi::um::projectedfslib as prjfs;
 mod conv;
 mod guid;
 mod provider;
+mod regfs;
 
 use crate::conv::WStrExt;
-use crate::provider::Provider;
+use crate::provider::{Provider, ProviderT};
+use crate::regfs::RegFs;
 
 fn main() -> Result<()> {
     let path = PathBuf::from("./test");
@@ -23,6 +25,7 @@ fn main() -> Result<()> {
         NotificationMappingsCount: 1,
         ..Default::default()
     };
-    let provider = Provider::new(path, opts)?;
+    let regfs: Box<dyn ProviderT> = Box::new(RegFs::new());
+    let provider = Provider::new(path, opts, regfs)?;
     Ok(())
 }
