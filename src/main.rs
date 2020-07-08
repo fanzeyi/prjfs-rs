@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use winapi::um::projectedfslib as prjfs;
 
 mod conv;
+mod dirinfo;
 mod guid;
 mod provider;
 mod regfs;
+mod regop;
 
 use crate::conv::WStrExt;
 use crate::provider::{Provider, ProviderT};

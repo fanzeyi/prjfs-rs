@@ -1,6 +1,10 @@
 use anyhow::Result;
 use log::{info, warn};
-use std::{collections::HashMap, path::Path, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 use winapi::{
     shared::{
         guiddef::GUID,
@@ -8,23 +12,17 @@ use winapi::{
     },
     um::{
         projectedfslib::{
-            self, PRJ_CALLBACK_DATA, PRJ_DIR_ENTRY_BUFFER_HANDLE, PRJ_NOTIFICATION_PARAMETERS,
+            self as prjfs, PRJ_CALLBACK_DATA, PRJ_DIR_ENTRY_BUFFER_HANDLE,
+            PRJ_NOTIFICATION_PARAMETERS,
         },
-        winnt::{HRESULT, PCWSTR},
+        winnt::{HRESULT, LPCWSTR, PCWSTR},
     },
 };
 
 use crate::conv::RawWStrExt;
+use crate::dirinfo::DirInfo;
 use crate::guid::guid_to_bytes;
 use crate::provider::ProviderT;
-
-struct DirInfo;
-
-impl DirInfo {
-    pub fn new<T: AsRef<Path>>(path: T) -> Self {
-        DirInfo
-    }
-}
 
 #[derive(Default)]
 pub struct State {
@@ -34,6 +32,8 @@ pub struct State {
 pub struct RegFs {
     state: Mutex<State>,
     readonly: bool,
+
+    context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT,
 }
 
 impl RegFs {
@@ -41,11 +41,32 @@ impl RegFs {
         RegFs {
             state: Mutex::new(Default::default()),
             readonly: true,
+            context: std::ptr::null_mut(),
+        }
+    }
+}
+
+impl RegFs {
+    fn write_placeholder_info(
+        &self,
+        filepath: LPCWSTR,
+        info: prjfs::PRJ_PLACEHOLDER_INFO,
+    ) -> HRESULT {
+        unsafe {
+            prjfs::PrjWritePlaceholderInfo(
+                self.context,
+                filepath,
+                &info,
+                std::mem::size_of_val(&info) as u32,
+            )
         }
     }
 }
 
 impl ProviderT for RegFs {
+    fn set_context(&mut self, context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT) {
+        self.context = context;
+    }
     fn start_dir_enum(
         &self,
         callback_data: &PRJ_CALLBACK_DATA,
@@ -69,6 +90,7 @@ impl ProviderT for RegFs {
 
         Ok(0)
     }
+
     fn end_dir_enum(
         &self,
         _callback_data: &PRJ_CALLBACK_DATA,
@@ -82,6 +104,7 @@ impl ProviderT for RegFs {
         info!("<---- end_dir_enum: return 0x0");
         Ok(0)
     }
+
     fn get_dir_enum(
         &self,
         data: &PRJ_CALLBACK_DATA,
@@ -91,17 +114,38 @@ impl ProviderT for RegFs {
     ) -> Result<HRESULT> {
         todo!()
     }
+
     fn get_placeholder_info(&self, data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
-        todo!()
+        let filepath = data.FilePathName.to_os();
+        info!(
+            "----> get_placeholder_info: Path [{:?}] triggered by {:?}]",
+            filepath,
+            data.TriggeringProcessImageFileName.to_os()
+        );
+
+        let iskey = if false { true } else { false };
+        let size = 0;
+
+        let mut placeholder = prjfs::PRJ_PLACEHOLDER_INFO::default();
+        placeholder.FileBasicInfo.IsDirectory = iskey as u8;
+        placeholder.FileBasicInfo.FileSize = size;
+
+        let result = self.write_placeholder_info(data.FilePathName, placeholder);
+
+        info!("<---- get_placeholder_info: {:08x}", result);
+
+        Ok(result)
     }
+
     fn get_file_data(&self, data: &PRJ_CALLBACK_DATA, offset: u64, length: u32) -> Result<HRESULT> {
         todo!()
     }
+
     fn notify(
         &self,
         data: &PRJ_CALLBACK_DATA,
         _is_directory: bool,
-        notification_type: projectedfslib::PRJ_NOTIFICATION,
+        notification_type: prjfs::PRJ_NOTIFICATION,
         destination_file_name: PCWSTR,
         _parameters: &PRJ_NOTIFICATION_PARAMETERS,
     ) -> Result<HRESULT> {
@@ -114,17 +158,17 @@ impl ProviderT for RegFs {
         info!("--- Notification: 0x{:08x}", notification_type);
 
         match notification_type {
-            projectedfslib::PRJ_NOTIFICATION_FILE_OPENED => Ok(S_OK),
-            projectedfslib::PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_MODIFIED
-            | projectedfslib::PRJ_NOTIFICATION_FILE_OVERWRITTEN => {
+            prjfs::PRJ_NOTIFICATION_FILE_OPENED => Ok(S_OK),
+            prjfs::PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_MODIFIED
+            | prjfs::PRJ_NOTIFICATION_FILE_OVERWRITTEN => {
                 info!(" ----- [{:?}] was modified", filepath);
                 Ok(S_OK)
             }
-            projectedfslib::PRJ_NOTIFY_NEW_FILE_CREATED => {
+            prjfs::PRJ_NOTIFY_NEW_FILE_CREATED => {
                 info!(" ----- [{:?}] was created", filepath);
                 Ok(S_OK)
             }
-            projectedfslib::PRJ_NOTIFY_FILE_RENAMED => {
+            prjfs::PRJ_NOTIFY_FILE_RENAMED => {
                 info!(
                     " ----- [{:?}] -> [{:?}]",
                     filepath,
@@ -132,11 +176,11 @@ impl ProviderT for RegFs {
                 );
                 Ok(S_OK)
             }
-            projectedfslib::PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED => {
+            prjfs::PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED => {
                 info!(" ----- [{:?}] was deleted", filepath);
                 Ok(S_OK)
             }
-            projectedfslib::PRJ_NOTIFICATION_PRE_RENAME => {
+            prjfs::PRJ_NOTIFICATION_PRE_RENAME => {
                 if self.readonly {
                     info!(" ----- rename request for [{:?}] was rejected", filepath);
                     Ok(HRESULT_FROM_WIN32(winerror::ERROR_ACCESS_DENIED))
@@ -145,7 +189,7 @@ impl ProviderT for RegFs {
                     Ok(S_OK)
                 }
             }
-            projectedfslib::PRJ_NOTIFICATION_PRE_DELETE => {
+            prjfs::PRJ_NOTIFICATION_PRE_DELETE => {
                 if self.readonly {
                     info!(" ----- delete request for [{:?}] was rejected", filepath);
                     Ok(HRESULT_FROM_WIN32(winerror::ERROR_ACCESS_DENIED))
@@ -154,16 +198,18 @@ impl ProviderT for RegFs {
                     Ok(S_OK)
                 }
             }
-            projectedfslib::PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL => Ok(S_OK),
+            prjfs::PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL => Ok(S_OK),
             t => {
                 warn!("notify: Unexpected notification: 0x{:08x}", t);
                 Ok(S_OK)
             }
         }
     }
+
     fn query_file_name(&self, _data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
         todo!()
     }
+
     fn cancel_command(&self, _data: &PRJ_CALLBACK_DATA) -> Result<()> {
         todo!()
     }

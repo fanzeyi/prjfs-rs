@@ -8,5 +8,5 @@ anyhow = "*"
 log = "*"
 
 [dependencies.winapi]
-features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase"]
+features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winreg"]
 path = "../winapi-rs"

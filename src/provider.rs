@@ -1,9 +1,12 @@
 use anyhow::{anyhow, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use winapi::shared::guiddef::GUID;
 use winapi::um::projectedfslib as prjfs;
-use winapi::um::winnt::{HRESULT, PCWSTR};
+use winapi::{
+    ctypes::c_void,
+    um::winnt::{HRESULT, PCWSTR},
+};
 
 use crate::conv::WStrExt;
 use crate::guid;
@@ -93,6 +96,8 @@ mod ffi {
 }
 
 pub trait ProviderT {
+    fn set_context(&mut self, context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT);
+
     fn start_dir_enum(
         &self,
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
@@ -130,16 +135,14 @@ pub trait ProviderT {
 }
 
 pub struct Provider {
-    root_path: PathBuf,
-    options: prjfs::PRJ_STARTVIRTUALIZING_OPTIONS,
-    inner: Box<dyn ProviderT>,
+    inner: *mut Box<dyn ProviderT>,
 }
 
 macro_rules! wintry {
     ($e: expr) => {
         match $e {
             Ok(result) => result,
-            Err(x) => winapi::shared::winerror::S_FALSE,
+            Err(_) => winapi::shared::winerror::S_FALSE,
         }
     };
 }
@@ -150,12 +153,8 @@ impl Provider {
         options: prjfs::PRJ_STARTVIRTUALIZING_OPTIONS,
         inner: Box<dyn ProviderT>,
     ) -> Result<Provider> {
-        let provider = Provider {
-            root_path,
-            options,
-            inner,
-        };
-        provider.ensure_virtualization_root()?;
+        Self::ensure_virtualization_root(&root_path)?;
+
         let mut callbacks: prjfs::PRJ_CALLBACKS = Default::default();
         callbacks.StartDirectoryEnumerationCallback =
             Box::into_raw(Box::new(Some(ffi::start_dir_enum_callback_c)));
@@ -169,15 +168,41 @@ impl Provider {
             Box::into_raw(Box::new(Some(ffi::get_file_data_callback_c)));
         callbacks.QueryFileNameCallback = Box::into_raw(Box::new(Some(ffi::query_file_name_c)));
         callbacks.CancelCommandCallback = Box::into_raw(Box::new(Some(ffi::cancel_command_c)));
+
+        let context: *mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT =
+            unsafe { std::mem::zeroed() };
+
+        let inner = Box::into_raw(Box::new(inner));
+        let instance: *const c_void = unsafe { &*(inner as *mut c_void) };
+
+        unsafe {
+            // TODO: check HRESULT
+            prjfs::PrjStartVirtualizing(
+                root_path.into_os_string().to_wstr(),
+                &callbacks,
+                instance,
+                &options,
+                context,
+            );
+        }
+
+        // is this.. UB?
+        unsafe {
+            (&mut *inner).set_context(*context);
+        }
+
+        let provider = Provider { inner };
+
         Ok(provider)
     }
 
-    fn ensure_virtualization_root(&self) -> Result<()> {
-        let guid_file = self.root_path.join(GUID_FILE);
+    fn ensure_virtualization_root<T: AsRef<Path>>(root_path: T) -> Result<()> {
+        let root_path = root_path.as_ref();
+        let guid_file = root_path.join(GUID_FILE);
 
-        if self.root_path.exists() && self.root_path.is_dir() {
-            if !self.root_path.is_dir() {
-                return Err(anyhow!(format!("{:?} is not a directory", self.root_path)));
+        if root_path.exists() && root_path.is_dir() {
+            if !root_path.is_dir() {
+                return Err(anyhow!(format!("{:?} is not a directory", root_path)));
             }
             // virtualization root is present, attempts to read guid
             let guid = std::fs::read(&guid_file)?;
@@ -185,11 +210,11 @@ impl Provider {
             Ok(())
         } else {
             let guid = guid::create_guid();
-            std::fs::create_dir(&self.root_path)?;
+            std::fs::create_dir(&root_path)?;
             std::fs::write(&guid_file, guid::guid_to_bytes(&guid))?;
             let hr = unsafe {
                 prjfs::PrjMarkDirectoryAsPlaceholder(
-                    self.root_path.clone().to_wstr(),
+                    root_path.clone().to_wstr(),
                     null_mut(),
                     null_mut(),
                     &guid,
@@ -198,7 +223,7 @@ impl Provider {
             if hr < 0 {
                 // failed, clean up
                 let _ = std::fs::remove_file(&guid_file);
-                let _ = std::fs::remove_dir(&self.root_path);
+                let _ = std::fs::remove_dir(&root_path);
                 return Err(anyhow!(format!("HRESULT: {}", hr)));
             }
             Ok(())
@@ -210,7 +235,8 @@ impl Provider {
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
         enumeration_id: &GUID,
     ) -> HRESULT {
-        wintry!(self.inner.start_dir_enum(callback_data, enumeration_id))
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.start_dir_enum(callback_data, enumeration_id))
     }
 
     pub fn end_dir_enum(
@@ -218,7 +244,8 @@ impl Provider {
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
         enumeration_id: &GUID,
     ) -> HRESULT {
-        wintry!(self.inner.end_dir_enum(callback_data, enumeration_id))
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.end_dir_enum(callback_data, enumeration_id))
     }
 
     pub fn get_dir_enum(
@@ -228,7 +255,8 @@ impl Provider {
         search_expression: PCWSTR,
         dir_entry_buffer_handle: prjfs::PRJ_DIR_ENTRY_BUFFER_HANDLE,
     ) -> HRESULT {
-        wintry!(self.inner.get_dir_enum(
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.get_dir_enum(
             data,
             enumeration,
             search_expression,
@@ -237,7 +265,8 @@ impl Provider {
     }
 
     pub fn get_placeholder_info(&self, data: &prjfs::PRJ_CALLBACK_DATA) -> HRESULT {
-        wintry!(self.inner.get_placeholder_info(data))
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.get_placeholder_info(data))
     }
 
     pub fn get_file_data(
@@ -246,7 +275,8 @@ impl Provider {
         offset: u64,
         length: u32,
     ) -> HRESULT {
-        wintry!(self.inner.get_file_data(data, offset, length))
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.get_file_data(data, offset, length))
     }
 
     pub fn notify(
@@ -257,7 +287,8 @@ impl Provider {
         destination_file_name: PCWSTR,
         parameters: &prjfs::PRJ_NOTIFICATION_PARAMETERS,
     ) -> HRESULT {
-        wintry!(self.inner.notify(
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.notify(
             data,
             is_directory,
             notification_type,
@@ -267,10 +298,12 @@ impl Provider {
     }
 
     pub fn query_file_name(&self, data: &prjfs::PRJ_CALLBACK_DATA) -> HRESULT {
-        wintry!(self.inner.query_file_name(data))
+        let inner = unsafe { &*self.inner };
+        wintry!(inner.query_file_name(data))
     }
 
     pub fn cancel_command(&self, data: &prjfs::PRJ_CALLBACK_DATA) {
-        let _ = self.inner.cancel_command(data);
+        let inner = unsafe { &*self.inner };
+        let _ = inner.cancel_command(data);
     }
 }
