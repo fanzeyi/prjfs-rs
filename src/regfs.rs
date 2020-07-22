@@ -2,7 +2,6 @@ use anyhow::{anyhow, Result};
 use log::{info, warn};
 use std::{collections::HashMap, ffi::OsString, sync::Mutex};
 use winapi::{
-    ctypes::c_void,
     shared::{
         guiddef::GUID,
         ntdef::TRUE,
@@ -204,19 +203,33 @@ impl ProviderT for RegFs {
     }
 
     fn get_placeholder_info(&self, data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
-        let filepath = data.FilePathName.to_os();
+        let path = data.FilePathName.to_os();
         info!(
             "----> get_placeholder_info: Path [{:?}] triggered by {:?}]",
-            filepath,
+            path,
             data.TriggeringProcessImageFileName.to_os()
         );
 
-        let iskey = if false { true } else { false };
-        let size = 0;
+        let size: Option<i64> = if self.regops.does_key_exist(path.as_ref()) {
+            None
+        } else if let Some(size) = self.regops.does_value_exist(path.as_ref()) {
+            Some(size as i64)
+        } else {
+            info!(
+                "<---- get_place_holder_info: return {:08x}",
+                winerror::ERROR_FILE_NOT_FOUND
+            );
+            return Ok(winerror::HRESULT_FROM_WIN32(winerror::ERROR_FILE_NOT_FOUND));
+        };
 
         let mut placeholder = prjfs::PRJ_PLACEHOLDER_INFO::default();
-        placeholder.FileBasicInfo.IsDirectory = iskey as u8;
-        placeholder.FileBasicInfo.FileSize = size;
+        if let Some(size) = size {
+            placeholder.FileBasicInfo.IsDirectory = false as u8;
+            placeholder.FileBasicInfo.FileSize = size;
+        } else {
+            placeholder.FileBasicInfo.IsDirectory = true as u8;
+            placeholder.FileBasicInfo.FileSize = 0;
+        }
 
         let result = self.write_placeholder_info(data.FilePathName, placeholder);
 
@@ -241,7 +254,7 @@ impl ProviderT for RegFs {
         let buffer =
             unsafe { std::slice::from_raw_parts_mut(rawbuffer as *mut u8, length as usize) };
 
-        let hr = if let Some(bytes) = self.regops.read_value(path) {
+        let hr = if let Some(bytes) = self.regops.read_value(path.as_ref()) {
             buffer.copy_from_slice(&bytes);
             unsafe {
                 prjfs::PrjWriteFileData(self.context, &data.DataStreamId, rawbuffer, offset, length)

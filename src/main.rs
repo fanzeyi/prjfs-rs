@@ -30,8 +30,7 @@ fn main() -> Result<()> {
         ..Default::default()
     };
     let regfs: Box<dyn ProviderT> = Box::new(RegFs::new());
-    let provider = Provider::new(path, opts, regfs)?;
+    let _provider = Provider::new(path, opts, regfs)?;
 
     loop {}
-    Ok(())
 }

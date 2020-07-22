@@ -4,7 +4,6 @@ use std::{
     ffi::OsString,
     path::{Component, Path, PathBuf},
 };
-use winapi::shared::minwindef::PBYTE;
 use winreg::RegKey;
 
 mod utils {
@@ -109,8 +108,7 @@ impl RegOps {
         }
     }
 
-    pub fn read_value(&self, path: OsString) -> Option<Vec<u8>> {
-        let path: &Path = path.as_ref();
+    pub fn read_value(&self, path: &Path) -> Option<Vec<u8>> {
         let mut parts = path.components();
 
         if parts.clone().count() <= 1 {
@@ -126,11 +124,11 @@ impl RegOps {
             .map(|value| value.bytes)
     }
 
-    pub fn does_key_exist(&self, path: OsString) -> bool {
-        self.open_key_by_path(path.as_ref()).is_some()
+    pub fn does_key_exist(&self, path: &Path) -> bool {
+        self.open_key_by_path(path).is_some()
     }
 
-    pub fn does_value_exist(&self, path: OsString) -> Option<usize> {
+    pub fn does_value_exist(&self, path: &Path) -> Option<usize> {
         self.read_value(path).map(|bytes| bytes.len())
     }
 
