@@ -199,8 +199,7 @@ impl ProviderT for RegFs {
 
         let instance_info = {
             let ptr = std::ptr::null_mut();
-            let hr =
-                unsafe { prjfs::PrjGetVirtualizationInstanceInfo(self.context, instance_info) };
+            let hr = unsafe { prjfs::PrjGetVirtualizationInstanceInfo(self.context, ptr) };
             if winerror::FAILED(hr) {
                 warn!(
                     "<---- get_file_data: PrjGetVirtualizationInstanceInfo: {:08x}",
