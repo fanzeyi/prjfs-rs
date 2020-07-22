@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::{info, warn};
 use std::{
     collections::HashMap,
+    ffi::OsString,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -60,6 +61,14 @@ impl RegFs {
             )
         }
     }
+
+    fn populate_dir_info_for_path(
+        &self,
+        path: OsString,
+        dirinfo: &mut DirInfo,
+        search_expression: OsString,
+    ) {
+    }
 }
 
 impl ProviderT for RegFs {
@@ -99,7 +108,12 @@ impl ProviderT for RegFs {
         info!("----> end_dir_enum");
 
         let guid = guid_to_bytes(enumeration_id);
-        self.state.lock().unwrap().enum_sessions.remove(&guid);
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow!("unable to acquire state"))?;
+
+        state.enum_sessions.remove(&guid);
 
         info!("<---- end_dir_enum: return 0x0");
         Ok(0)
@@ -108,11 +122,53 @@ impl ProviderT for RegFs {
     fn get_dir_enum(
         &self,
         data: &PRJ_CALLBACK_DATA,
-        enumeration: &GUID,
+        enumeration_id: &GUID,
         search_expression: PCWSTR,
-        dir_entry_buffer_handle: PRJ_DIR_ENTRY_BUFFER_HANDLE,
+        handle: PRJ_DIR_ENTRY_BUFFER_HANDLE,
     ) -> Result<HRESULT> {
-        todo!()
+        info!("----> get_dir_enum");
+
+        let guid = guid_to_bytes(enumeration_id);
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow!("unable to acquire state"))?;
+
+        let session = match state.enum_sessions.get_mut(&guid) {
+            Some(session) => session,
+            None => return Ok(winerror::E_INVALIDARG),
+        };
+
+        if data.Flags & prjfs::PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN != 0 {
+            session.reset();
+        }
+
+        if !session.filled() {
+            self.populate_dir_info_for_path(
+                data.FilePathName.to_os(),
+                session,
+                search_expression.to_os(),
+            );
+        }
+
+        while session.current_is_valid() {
+            let result = unsafe {
+                prjfs::PrjFillDirEntryBuffer(
+                    session.current_file_name(),
+                    &mut session.current_basic_info(),
+                    handle,
+                )
+            };
+
+            if result != S_OK {
+                break;
+            }
+
+            session.move_next();
+        }
+
+        info!("<---- get_dir_enum: return {:08x}", 0);
+        Ok(0)
     }
 
     fn get_placeholder_info(&self, data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
@@ -207,10 +263,10 @@ impl ProviderT for RegFs {
     }
 
     fn query_file_name(&self, _data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
-        todo!()
+        Ok(0)
     }
 
     fn cancel_command(&self, _data: &PRJ_CALLBACK_DATA) -> Result<()> {
-        todo!()
+        Ok(())
     }
 }

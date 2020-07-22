@@ -3,7 +3,7 @@ use std::{
     ffi::OsString,
     path::{Path, PathBuf},
 };
-use winapi::um::projectedfslib as prjfs;
+use winapi::um::{projectedfslib as prjfs, winnt::PCWSTR};
 
 use crate::conv::WStrExt;
 
@@ -27,6 +27,24 @@ impl DirInfo {
             path: path.as_ref().to_owned(),
             ..Default::default()
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.index = 0;
+        self.filled = false;
+        self.entries = Vec::new();
+    }
+
+    pub fn filled(&self) -> bool {
+        self.filled
+    }
+
+    pub fn current_is_valid(&self) -> bool {
+        self.index < self.entries.len()
+    }
+
+    pub fn current_file_name(&self) -> PCWSTR {
+        self.entries[self.index].filename.to_wstr()
     }
 
     pub fn current_basic_info(&self) -> prjfs::PRJ_FILE_BASIC_INFO {

@@ -7,6 +7,7 @@ version = "0.1.0"
 anyhow = "*"
 env_logger = "*"
 log = "*"
+winreg = "*"
 
 [dependencies.winapi]
 features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winreg", "winnt"]
