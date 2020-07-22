@@ -141,15 +141,6 @@ pub struct Provider {
     inner: Box<dyn ProviderT>,
 }
 
-macro_rules! wintry {
-    ($e: expr) => {
-        match $e {
-            Ok(result) => result,
-            Err(_) => winapi::shared::winerror::S_FALSE,
-        }
-    };
-}
-
 impl Provider {
     pub fn new(
         root_path: PathBuf,
@@ -228,7 +219,9 @@ impl Provider {
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
         enumeration_id: &GUID,
     ) -> HRESULT {
-        wintry!(self.inner.start_dir_enum(callback_data, enumeration_id))
+        self.inner
+            .start_dir_enum(callback_data, enumeration_id)
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn end_dir_enum(
@@ -236,7 +229,9 @@ impl Provider {
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
         enumeration_id: &GUID,
     ) -> HRESULT {
-        wintry!(self.inner.end_dir_enum(callback_data, enumeration_id))
+        self.inner
+            .end_dir_enum(callback_data, enumeration_id)
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn get_dir_enum(
@@ -246,16 +241,20 @@ impl Provider {
         search_expression: PCWSTR,
         dir_entry_buffer_handle: prjfs::PRJ_DIR_ENTRY_BUFFER_HANDLE,
     ) -> HRESULT {
-        wintry!(self.inner.get_dir_enum(
-            data,
-            enumeration,
-            search_expression,
-            dir_entry_buffer_handle,
-        ))
+        self.inner
+            .get_dir_enum(
+                data,
+                enumeration,
+                search_expression,
+                dir_entry_buffer_handle,
+            )
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn get_placeholder_info(&self, data: &prjfs::PRJ_CALLBACK_DATA) -> HRESULT {
-        wintry!(self.inner.get_placeholder_info(data))
+        self.inner
+            .get_placeholder_info(data)
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn get_file_data(
@@ -264,7 +263,9 @@ impl Provider {
         offset: u64,
         length: u32,
     ) -> HRESULT {
-        wintry!(self.inner.get_file_data(data, offset, length))
+        self.inner
+            .get_file_data(data, offset, length)
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn notify(
@@ -275,17 +276,21 @@ impl Provider {
         destination_file_name: PCWSTR,
         parameters: &prjfs::PRJ_NOTIFICATION_PARAMETERS,
     ) -> HRESULT {
-        wintry!(self.inner.notify(
-            data,
-            is_directory,
-            notification_type,
-            destination_file_name,
-            parameters,
-        ))
+        self.inner
+            .notify(
+                data,
+                is_directory,
+                notification_type,
+                destination_file_name,
+                parameters,
+            )
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn query_file_name(&self, data: &prjfs::PRJ_CALLBACK_DATA) -> HRESULT {
-        wintry!(self.inner.query_file_name(data))
+        self.inner
+            .query_file_name(data)
+            .unwrap_or(winapi::shared::winerror::S_FALSE)
     }
 
     pub fn cancel_command(&self, data: &prjfs::PRJ_CALLBACK_DATA) {
