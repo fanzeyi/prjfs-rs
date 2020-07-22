@@ -15,6 +15,8 @@ use crate::provider::{Provider, ProviderT};
 use crate::regfs::RegFs;
 
 fn main() -> Result<()> {
+    env_logger::init();
+
     let path = PathBuf::from("./test");
     let mut mappings: [prjfs::PRJ_NOTIFICATION_MAPPING; 1] = [prjfs::PRJ_NOTIFICATION_MAPPING {
         NotificationBitMask: prjfs::PRJ_NOTIFY_FILE_OPENED
@@ -29,5 +31,7 @@ fn main() -> Result<()> {
     };
     let regfs: Box<dyn ProviderT> = Box::new(RegFs::new());
     let provider = Provider::new(path, opts, regfs)?;
+
+    loop {}
     Ok(())
 }

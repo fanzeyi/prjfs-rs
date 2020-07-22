@@ -15,6 +15,7 @@ const GUID_FILE: &'static str = ".regfsId";
 
 mod ffi {
     use winapi::shared::guiddef::GUID;
+    use winapi::shared::ntdef::TRUE;
     use winapi::um::projectedfslib as prjfs;
     use winapi::um::winnt::{HRESULT, PCWSTR};
 
@@ -67,7 +68,7 @@ mod ffi {
 
     pub unsafe extern "system" fn notification_callback_c(
         data: *const prjfs::PRJ_CALLBACK_DATA,
-        is_directory: bool,
+        is_directory: u8,
         notification_type: prjfs::PRJ_NOTIFICATION,
         destination_file_name: PCWSTR,
         parameters: *mut prjfs::PRJ_NOTIFICATION_PARAMETERS,
@@ -75,7 +76,7 @@ mod ffi {
         let provider = (*data).InstanceContext.cast::<super::Provider>();
         (*provider).notify(
             &*data,
-            is_directory,
+            is_directory == TRUE,
             notification_type,
             destination_file_name,
             &*parameters,
@@ -96,7 +97,9 @@ mod ffi {
 }
 
 pub trait ProviderT {
-    fn set_context(&mut self, context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT);
+    fn get_context_space(&mut self) -> Option<*mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
+        None
+    }
 
     fn start_dir_enum(
         &self,
@@ -135,7 +138,7 @@ pub trait ProviderT {
 }
 
 pub struct Provider {
-    inner: *mut Box<dyn ProviderT>,
+    inner: Box<dyn ProviderT>,
 }
 
 macro_rules! wintry {
@@ -155,43 +158,33 @@ impl Provider {
     ) -> Result<Provider> {
         Self::ensure_virtualization_root(&root_path)?;
 
-        let mut callbacks: prjfs::PRJ_CALLBACKS = Default::default();
-        callbacks.StartDirectoryEnumerationCallback =
-            Box::into_raw(Box::new(Some(ffi::start_dir_enum_callback_c)));
-        callbacks.EndDirectoryEnumerationCallback =
-            Box::into_raw(Box::new(Some(ffi::end_dir_enum_callback_c)));
-        callbacks.GetDirectoryEnumerationCallback =
-            Box::into_raw(Box::new(Some(ffi::get_dir_enum_callback_c)));
-        callbacks.GetPlaceholderInfoCallback =
-            Box::into_raw(Box::new(Some(ffi::get_placeholder_info_callback_c)));
-        callbacks.GetFileDataCallback =
-            Box::into_raw(Box::new(Some(ffi::get_file_data_callback_c)));
-        callbacks.QueryFileNameCallback = Box::into_raw(Box::new(Some(ffi::query_file_name_c)));
-        callbacks.CancelCommandCallback = Box::into_raw(Box::new(Some(ffi::cancel_command_c)));
+        let callbacks = prjfs::PRJ_CALLBACKS {
+            StartDirectoryEnumerationCallback: Some(ffi::start_dir_enum_callback_c),
+            EndDirectoryEnumerationCallback: Some(ffi::end_dir_enum_callback_c),
+            GetDirectoryEnumerationCallback: Some(ffi::get_dir_enum_callback_c),
+            GetPlaceholderInfoCallback: Some(ffi::get_placeholder_info_callback_c),
+            GetFileDataCallback: Some(ffi::get_file_data_callback_c),
+            QueryFileNameCallback: Some(ffi::query_file_name_c),
+            CancelCommandCallback: Some(ffi::cancel_command_c),
+            NotificationCallback: Some(ffi::notification_callback_c),
+        };
 
-        let context: *mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT =
-            unsafe { std::mem::zeroed() };
-
-        let inner = Box::into_raw(Box::new(inner));
-        let instance: *const c_void = unsafe { &*(inner as *mut c_void) };
+        let mut provider = Provider { inner };
+        let ctx = provider
+            .inner
+            .get_context_space()
+            .unwrap_or(&mut std::ptr::null_mut());
 
         unsafe {
             // TODO: check HRESULT
             prjfs::PrjStartVirtualizing(
                 root_path.into_os_string().to_wstr(),
-                &callbacks,
-                instance,
+                Box::into_raw(Box::new(callbacks)),
+                (&provider as *const Provider) as *const c_void,
                 &options,
-                context,
+                ctx,
             );
         }
-
-        // is this.. UB?
-        unsafe {
-            (&mut *inner).set_context(*context);
-        }
-
-        let provider = Provider { inner };
 
         Ok(provider)
     }
@@ -235,8 +228,7 @@ impl Provider {
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
         enumeration_id: &GUID,
     ) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.start_dir_enum(callback_data, enumeration_id))
+        wintry!(self.inner.start_dir_enum(callback_data, enumeration_id))
     }
 
     pub fn end_dir_enum(
@@ -244,8 +236,7 @@ impl Provider {
         callback_data: &prjfs::PRJ_CALLBACK_DATA,
         enumeration_id: &GUID,
     ) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.end_dir_enum(callback_data, enumeration_id))
+        wintry!(self.inner.end_dir_enum(callback_data, enumeration_id))
     }
 
     pub fn get_dir_enum(
@@ -255,8 +246,7 @@ impl Provider {
         search_expression: PCWSTR,
         dir_entry_buffer_handle: prjfs::PRJ_DIR_ENTRY_BUFFER_HANDLE,
     ) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.get_dir_enum(
+        wintry!(self.inner.get_dir_enum(
             data,
             enumeration,
             search_expression,
@@ -265,8 +255,7 @@ impl Provider {
     }
 
     pub fn get_placeholder_info(&self, data: &prjfs::PRJ_CALLBACK_DATA) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.get_placeholder_info(data))
+        wintry!(self.inner.get_placeholder_info(data))
     }
 
     pub fn get_file_data(
@@ -275,8 +264,7 @@ impl Provider {
         offset: u64,
         length: u32,
     ) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.get_file_data(data, offset, length))
+        wintry!(self.inner.get_file_data(data, offset, length))
     }
 
     pub fn notify(
@@ -287,8 +275,7 @@ impl Provider {
         destination_file_name: PCWSTR,
         parameters: &prjfs::PRJ_NOTIFICATION_PARAMETERS,
     ) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.notify(
+        wintry!(self.inner.notify(
             data,
             is_directory,
             notification_type,
@@ -298,12 +285,10 @@ impl Provider {
     }
 
     pub fn query_file_name(&self, data: &prjfs::PRJ_CALLBACK_DATA) -> HRESULT {
-        let inner = unsafe { &*self.inner };
-        wintry!(inner.query_file_name(data))
+        wintry!(self.inner.query_file_name(data))
     }
 
     pub fn cancel_command(&self, data: &prjfs::PRJ_CALLBACK_DATA) {
-        let inner = unsafe { &*self.inner };
-        let _ = inner.cancel_command(data);
+        let _ = self.inner.cancel_command(data);
     }
 }

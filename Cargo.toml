@@ -5,8 +5,9 @@ name = "prjfs-rs"
 version = "0.1.0"
 [dependencies]
 anyhow = "*"
+env_logger = "*"
 log = "*"
 
 [dependencies.winapi]
-features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winreg"]
+features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winreg", "winnt"]
 path = "../winapi-rs"

@@ -32,7 +32,6 @@ pub struct State {
 pub struct RegFs {
     state: Mutex<State>,
     readonly: bool,
-
     context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT,
 }
 
@@ -64,9 +63,10 @@ impl RegFs {
 }
 
 impl ProviderT for RegFs {
-    fn set_context(&mut self, context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT) {
-        self.context = context;
+    fn get_context_space(&mut self) -> Option<*mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
+        Some(&mut self.context)
     }
+
     fn start_dir_enum(
         &self,
         callback_data: &PRJ_CALLBACK_DATA,
