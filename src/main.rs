@@ -22,7 +22,7 @@ fn main() -> Result<()> {
         NotificationBitMask: prjfs::PRJ_NOTIFY_FILE_OPENED
             | prjfs::PRJ_NOTIFY_PRE_RENAME
             | prjfs::PRJ_NOTIFY_PRE_DELETE,
-        NotificationRoot: "".to_wstr(),
+        NotificationRoot: "".to_wstr().as_ptr(),
     }];
     let opts = prjfs::PRJ_STARTVIRTUALIZING_OPTIONS {
         NotificationMappings: mappings.as_mut_ptr(),

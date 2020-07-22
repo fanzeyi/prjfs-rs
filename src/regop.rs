@@ -20,7 +20,7 @@ mod utils {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RegEntry {
     pub name: OsString,
     pub size: u64,
@@ -35,7 +35,7 @@ impl RegEntry {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RegEntires {
     pub subkeys: Vec<RegEntry>,
     pub values: Vec<RegEntry>,
@@ -156,20 +156,33 @@ impl RegOps {
 }
 
 #[test]
+fn test_enumerate_key() {
+    let ops = RegOps::new();
+    let keys = ops
+        .enumerate_key("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft".into())
+        .unwrap();
+
+    for key in keys.subkeys {
+        dbg!(key.name);
+    }
+}
+
+#[test]
 fn test_does_key_exist() {
     let ops = RegOps::new();
 
-    assert!(ops
-        .does_key_exist("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion".into()));
+    assert!(ops.does_key_exist(
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion".as_ref()
+    ));
 }
 
 #[test]
 fn test_read_value() {
     let ops = RegOps::new();
-    assert_eq!(ops.read_value("HKEY_LOCAL_MACHINE".into()), None);
-    assert_eq!(ops.read_value("".into()), None);
+    assert_eq!(ops.read_value("HKEY_LOCAL_MACHINE".as_ref()), None);
+    assert_eq!(ops.read_value("".as_ref()), None);
     assert_eq!(
-        ops.read_value("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentMajorVersionNumber".into()),
+        ops.read_value("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentMajorVersionNumber".as_ref()),
         Some(vec![10, 0, 0, 0])
     );
 }

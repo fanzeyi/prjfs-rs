@@ -169,7 +169,7 @@ impl Provider {
         unsafe {
             // TODO: check HRESULT
             prjfs::PrjStartVirtualizing(
-                root_path.into_os_string().to_wstr(),
+                root_path.into_os_string().to_wstr().as_ptr(),
                 Box::into_raw(Box::new(callbacks)),
                 (&provider as *const Provider) as *const c_void,
                 &options,
@@ -198,7 +198,7 @@ impl Provider {
             std::fs::write(&guid_file, guid::guid_to_bytes(&guid))?;
             let hr = unsafe {
                 prjfs::PrjMarkDirectoryAsPlaceholder(
-                    root_path.clone().to_wstr(),
+                    root_path.clone().to_wstr().as_ptr(),
                     null_mut(),
                     null_mut(),
                     &guid,

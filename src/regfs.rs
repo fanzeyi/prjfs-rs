@@ -75,7 +75,10 @@ impl RegFs {
 
         for subkey in entries.subkeys {
             let result = unsafe {
-                prjfs::PrjFileNameMatch(subkey.name.to_wstr(), search_expression.to_wstr())
+                prjfs::PrjFileNameMatch(
+                    subkey.name.to_wstr().as_ptr(),
+                    search_expression.to_wstr().as_ptr(),
+                )
             };
 
             if result == TRUE {
@@ -85,7 +88,10 @@ impl RegFs {
 
         for value in entries.values {
             let result = unsafe {
-                prjfs::PrjFileNameMatch(value.name.to_wstr(), search_expression.to_wstr())
+                prjfs::PrjFileNameMatch(
+                    value.name.to_wstr().as_ptr(),
+                    search_expression.to_wstr().as_ptr(),
+                )
             };
 
             if result == TRUE {
@@ -185,7 +191,7 @@ impl ProviderT for RegFs {
         while dirinfo.current_is_valid() {
             let result = unsafe {
                 prjfs::PrjFillDirEntryBuffer(
-                    dirinfo.current_file_name(),
+                    dirinfo.current_file_name().as_ptr(),
                     &mut dirinfo.current_basic_info(),
                     handle,
                 )
