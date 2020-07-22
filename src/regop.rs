@@ -109,16 +109,29 @@ impl RegOps {
         }
     }
 
-    pub fn read_value(&self, path: OsString, data: PBYTE, len: u32) -> bool {
-        todo!()
+    pub fn read_value(&self, path: OsString) -> Option<Vec<u8>> {
+        let path: &Path = path.as_ref();
+        let mut parts = path.components();
+
+        if parts.clone().count() <= 1 {
+            // only root or empty
+            return None;
+        }
+
+        let value = parts.next_back().unwrap();
+        let subkey = parts.as_path();
+
+        self.open_key_by_path(subkey)
+            .and_then(|subkey| subkey.get_raw_value(value).ok())
+            .map(|value| value.bytes)
     }
 
     pub fn does_key_exist(&self, path: OsString) -> bool {
         self.open_key_by_path(path.as_ref()).is_some()
     }
 
-    pub fn does_value_exist(&self, path: OsString, size: i64) -> bool {
-        todo!()
+    pub fn does_value_exist(&self, path: OsString) -> Option<usize> {
+        self.read_value(path).map(|bytes| bytes.len())
     }
 
     fn open_key_by_path(&self, path: &Path) -> Option<RegKey> {
@@ -150,4 +163,15 @@ fn test_does_key_exist() {
 
     assert!(ops
         .does_key_exist("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion".into()));
+}
+
+#[test]
+fn test_read_value() {
+    let ops = RegOps::new();
+    assert_eq!(ops.read_value("HKEY_LOCAL_MACHINE".into()), None);
+    assert_eq!(ops.read_value("".into()), None);
+    assert_eq!(
+        ops.read_value("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\CurrentMajorVersionNumber".into()),
+        Some(vec![10, 0, 0, 0])
+    );
 }
