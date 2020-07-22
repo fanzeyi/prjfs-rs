@@ -2,8 +2,10 @@ use anyhow::{anyhow, Result};
 use log::{info, warn};
 use std::{collections::HashMap, ffi::OsString, sync::Mutex};
 use winapi::{
+    ctypes::c_void,
     shared::{
         guiddef::GUID,
+        ntdef::TRUE,
         winerror::{self, HRESULT_FROM_WIN32, S_OK},
     },
     um::{
@@ -15,10 +17,11 @@ use winapi::{
     },
 };
 
-use crate::conv::RawWStrExt;
+use crate::conv::{RawWStrExt, WStrExt};
 use crate::dirinfo::DirInfo;
 use crate::guid::guid_to_bytes;
 use crate::provider::ProviderT;
+use crate::regop::RegOps;
 
 #[derive(Default)]
 pub struct State {
@@ -27,6 +30,7 @@ pub struct State {
 
 pub struct RegFs {
     state: Mutex<State>,
+    regops: RegOps,
     readonly: bool,
     context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT,
 }
@@ -35,6 +39,7 @@ impl RegFs {
     pub fn new() -> Self {
         RegFs {
             state: Mutex::new(Default::default()),
+            regops: RegOps::new(),
             readonly: true,
             context: std::ptr::null_mut(),
         }
@@ -62,7 +67,34 @@ impl RegFs {
         path: OsString,
         dirinfo: &mut DirInfo,
         search_expression: OsString,
-    ) {
+    ) -> bool {
+        let entries = if let Some(entries) = self.regops.enumerate_key(path) {
+            entries
+        } else {
+            return false;
+        };
+
+        for subkey in entries.subkeys {
+            let result = unsafe {
+                prjfs::PrjFileNameMatch(subkey.name.to_wstr(), search_expression.to_wstr())
+            };
+
+            if result == TRUE {
+                dirinfo.fill_dir_entry(subkey.name);
+            }
+        }
+
+        for value in entries.values {
+            let result = unsafe {
+                prjfs::PrjFileNameMatch(value.name.to_wstr(), search_expression.to_wstr())
+            };
+
+            if result == TRUE {
+                dirinfo.fill_file_entry(value.name, value.size as i64);
+            }
+        }
+
+        true
     }
 }
 
@@ -144,7 +176,11 @@ impl ProviderT for RegFs {
         }
 
         if !dirinfo.filled() {
-            self.populate_dir_info_for_path(path, dirinfo, search_expression);
+            if !self.populate_dir_info_for_path(path, dirinfo, search_expression) {
+                return Err(anyhow!("failed to get key"));
+            }
+
+            dirinfo.sort_entries_and_mark_filled();
         }
 
         while dirinfo.current_is_valid() {
@@ -197,31 +233,28 @@ impl ProviderT for RegFs {
             path, process
         );
 
-        let instance_info = {
-            let ptr = std::ptr::null_mut();
-            let hr = unsafe { prjfs::PrjGetVirtualizationInstanceInfo(self.context, ptr) };
-            if winerror::FAILED(hr) {
-                warn!(
-                    "<---- get_file_data: PrjGetVirtualizationInstanceInfo: {:08x}",
-                    hr
-                );
-                return Ok(hr);
-            }
-            ptr
-        };
-
-        let buffer = unsafe { prjfs::PrjAllocateAlignedBuffer(self.context, length as usize) };
-        if buffer.is_null() {
+        let rawbuffer = unsafe { prjfs::PrjAllocateAlignedBuffer(self.context, length as usize) };
+        if rawbuffer.is_null() {
             warn!("<---- get_file_data: Could not allocate write buffer.");
             return Ok(winerror::E_OUTOFMEMORY);
         }
+        let buffer =
+            unsafe { std::slice::from_raw_parts_mut(rawbuffer as *mut u8, length as usize) };
+
+        let hr = if let Some(bytes) = self.regops.read_value(path) {
+            buffer.copy_from_slice(&bytes);
+            unsafe {
+                prjfs::PrjWriteFileData(self.context, &data.DataStreamId, rawbuffer, offset, length)
+            }
+        } else {
+            winerror::HRESULT_FROM_WIN32(winerror::ERROR_FILE_NOT_FOUND)
+        };
 
         unsafe {
-            prjfs::PrjFreeAlignedBuffer(buffer);
+            prjfs::PrjFreeAlignedBuffer(rawbuffer);
         }
-
-        info!("<---- get_file_data: return {:08x}", S_OK);
-        Ok(S_OK)
+        info!("<---- get_file_data: return {:08x}", hr);
+        Ok(hr)
     }
 
     fn notify(

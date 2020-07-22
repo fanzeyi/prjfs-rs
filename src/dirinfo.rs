@@ -59,7 +59,15 @@ impl DirInfo {
         self.index < self.entries.len()
     }
 
-    pub fn fill_item_entry(&mut self, filename: OsString, size: i64, is_directory: bool) {
+    pub fn fill_dir_entry(&mut self, name: OsString) {
+        self.fill_item_entry(name, 0, true);
+    }
+
+    pub fn fill_file_entry(&mut self, name: OsString, size: i64) {
+        self.fill_item_entry(name, size, false);
+    }
+
+    fn fill_item_entry(&mut self, filename: OsString, size: i64, is_directory: bool) {
         self.entries.push(DirEntry {
             filename,
             size,

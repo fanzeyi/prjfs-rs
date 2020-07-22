@@ -23,8 +23,8 @@ mod utils {
 
 #[derive(Default)]
 pub struct RegEntry {
-    name: OsString,
-    size: u64,
+    pub name: OsString,
+    pub size: u64,
 }
 
 impl RegEntry {
@@ -38,8 +38,8 @@ impl RegEntry {
 
 #[derive(Default)]
 pub struct RegEntires {
-    subkeys: Vec<RegEntry>,
-    values: Vec<RegEntry>,
+    pub subkeys: Vec<RegEntry>,
+    pub values: Vec<RegEntry>,
 }
 
 pub struct RegOps {
