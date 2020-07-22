@@ -1,11 +1,6 @@
 use anyhow::{anyhow, Result};
 use log::{info, warn};
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+use std::{collections::HashMap, ffi::OsString, sync::Mutex};
 use winapi::{
     shared::{
         guiddef::GUID,
@@ -126,7 +121,12 @@ impl ProviderT for RegFs {
         search_expression: PCWSTR,
         handle: PRJ_DIR_ENTRY_BUFFER_HANDLE,
     ) -> Result<HRESULT> {
-        info!("----> get_dir_enum");
+        let path = data.FilePathName.to_os();
+        let search_expression = search_expression.to_os();
+        info!(
+            "----> get_dir_enum: Path [{:?}] SearchExpression: [{:?}]",
+            path, search_expression
+        );
 
         let guid = guid_to_bytes(enumeration_id);
         let mut state = self
@@ -134,28 +134,24 @@ impl ProviderT for RegFs {
             .lock()
             .map_err(|_| anyhow!("unable to acquire state"))?;
 
-        let session = match state.enum_sessions.get_mut(&guid) {
+        let dirinfo = match state.enum_sessions.get_mut(&guid) {
             Some(session) => session,
             None => return Ok(winerror::E_INVALIDARG),
         };
 
         if data.Flags & prjfs::PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN != 0 {
-            session.reset();
+            dirinfo.reset();
         }
 
-        if !session.filled() {
-            self.populate_dir_info_for_path(
-                data.FilePathName.to_os(),
-                session,
-                search_expression.to_os(),
-            );
+        if !dirinfo.filled() {
+            self.populate_dir_info_for_path(path, dirinfo, search_expression);
         }
 
-        while session.current_is_valid() {
+        while dirinfo.current_is_valid() {
             let result = unsafe {
                 prjfs::PrjFillDirEntryBuffer(
-                    session.current_file_name(),
-                    &mut session.current_basic_info(),
+                    dirinfo.current_file_name(),
+                    &mut dirinfo.current_basic_info(),
                     handle,
                 )
             };
@@ -164,11 +160,11 @@ impl ProviderT for RegFs {
                 break;
             }
 
-            session.move_next();
+            dirinfo.move_next();
         }
 
         info!("<---- get_dir_enum: return {:08x}", 0);
-        Ok(0)
+        Ok(S_OK)
     }
 
     fn get_placeholder_info(&self, data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
@@ -194,7 +190,39 @@ impl ProviderT for RegFs {
     }
 
     fn get_file_data(&self, data: &PRJ_CALLBACK_DATA, offset: u64, length: u32) -> Result<HRESULT> {
-        todo!()
+        let path = data.FilePathName.to_os();
+        let process = data.TriggeringProcessImageFileName.to_os();
+        info!(
+            "----> get_file_data: Path[{:?}] triggered by [{:?}]",
+            path, process
+        );
+
+        let instance_info = {
+            let ptr = std::ptr::null_mut();
+            let hr =
+                unsafe { prjfs::PrjGetVirtualizationInstanceInfo(self.context, instance_info) };
+            if winerror::FAILED(hr) {
+                warn!(
+                    "<---- get_file_data: PrjGetVirtualizationInstanceInfo: {:08x}",
+                    hr
+                );
+                return Ok(hr);
+            }
+            ptr
+        };
+
+        let buffer = unsafe { prjfs::PrjAllocateAlignedBuffer(self.context, length as usize) };
+        if buffer.is_null() {
+            warn!("<---- get_file_data: Could not allocate write buffer.");
+            return Ok(winerror::E_OUTOFMEMORY);
+        }
+
+        unsafe {
+            prjfs::PrjFreeAlignedBuffer(buffer);
+        }
+
+        info!("<---- get_file_data: return {:08x}", S_OK);
+        Ok(S_OK)
     }
 
     fn notify(
@@ -263,7 +291,7 @@ impl ProviderT for RegFs {
     }
 
     fn query_file_name(&self, _data: &PRJ_CALLBACK_DATA) -> Result<HRESULT> {
-        Ok(0)
+        Ok(S_OK)
     }
 
     fn cancel_command(&self, _data: &PRJ_CALLBACK_DATA) -> Result<()> {
