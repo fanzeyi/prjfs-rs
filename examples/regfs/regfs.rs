@@ -100,9 +100,7 @@ impl RegFs {
 }
 
 impl ProviderT for RegFs {
-    fn get_context_space(
-        &mut self,
-    ) -> Option<*mut prjfs::sys::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
+    fn get_context_mut(&mut self) -> Option<*mut prjfs::sys::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
         Some(&mut self.context)
     }
 

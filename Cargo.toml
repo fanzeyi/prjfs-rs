@@ -3,14 +3,14 @@ authors = ["Zeyi Fan <github@zeyi.fan>"]
 edition = "2018"
 name = "prjfs"
 version = "0.1.0"
-
 [dependencies]
 anyhow = "*"
+bitflags = "*"
 env_logger = "*"
 log = "*"
 winreg = "*"
 
 [dependencies.winapi]
+branch = "projectedfslib"
 features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winnt"]
 git = "http://github.com/fanzeyi/winapi-rs.git"
-branch = "projectedfslib"

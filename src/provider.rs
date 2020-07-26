@@ -97,7 +97,9 @@ mod ffi {
 }
 
 pub trait ProviderT {
-    fn get_context_space(&mut self) -> Option<*mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
+    /// Returns a mut pointer to a pre-allocated memory space to store
+    /// `prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT`
+    fn get_context_mut(&mut self) -> Option<*mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
         None
     }
 
@@ -144,7 +146,7 @@ pub struct Provider {
 impl Provider {
     pub fn new(
         root_path: PathBuf,
-        options: prjfs::PRJ_STARTVIRTUALIZING_OPTIONS,
+        options: crate::option::OptionBuilder,
         inner: Box<dyn ProviderT>,
     ) -> Result<Provider> {
         Self::ensure_virtualization_root(&root_path)?;
@@ -163,8 +165,9 @@ impl Provider {
         let mut provider = Provider { inner };
         let ctx = provider
             .inner
-            .get_context_space()
+            .get_context_mut()
             .unwrap_or(&mut std::ptr::null_mut());
+        let options = options.build();
 
         unsafe {
             // TODO: check HRESULT

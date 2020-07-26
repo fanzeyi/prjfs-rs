@@ -1,8 +1,7 @@
 #![feature(try_trait, slice_concat_trait)]
 use anyhow::Result;
-use prjfs::conv::WStrExt;
 use prjfs::provider::{Provider, ProviderT};
-use std::path::PathBuf;
+use prjfs::{NotificationType, OptionBuilder};
 
 mod dirinfo;
 mod regfs;
@@ -12,22 +11,12 @@ use crate::regfs::RegFs;
 
 fn main() -> Result<()> {
     env_logger::init();
-
-    let path = PathBuf::from("./test");
-    let mut mappings: [prjfs::sys::PRJ_NOTIFICATION_MAPPING; 1] =
-        [prjfs::sys::PRJ_NOTIFICATION_MAPPING {
-            NotificationBitMask: prjfs::sys::PRJ_NOTIFY_FILE_OPENED
-                | prjfs::sys::PRJ_NOTIFY_PRE_RENAME
-                | prjfs::sys::PRJ_NOTIFY_PRE_DELETE,
-            NotificationRoot: "".to_wstr().as_ptr(),
-        }];
-    let opts = prjfs::sys::PRJ_STARTVIRTUALIZING_OPTIONS {
-        NotificationMappings: mappings.as_mut_ptr(),
-        NotificationMappingsCount: 1,
-        ..Default::default()
-    };
+    let options = OptionBuilder::new().add_root_notification(
+        NotificationType::FILE_OPENED | NotificationType::PRE_RENAME | NotificationType::PRE_DELETE,
+    );
     let regfs: Box<dyn ProviderT> = Box::new(RegFs::new());
-    let _provider = Provider::new(path, opts, regfs)?;
+
+    let _provider = Provider::new("./test".into(), options, regfs)?;
 
     loop {}
 }
