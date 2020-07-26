@@ -1,11 +1,9 @@
+use prjfs::conv::{WStr, WStrExt};
 use std::{
     cmp::Ordering,
     ffi::OsString,
     path::{Path, PathBuf},
 };
-use winapi::um::projectedfslib as prjfs;
-
-use crate::conv::{WStr, WStrExt};
 
 #[derive(Debug)]
 struct DirEntry {
@@ -48,8 +46,8 @@ impl DirInfo {
         self.entries[self.index].filename.to_wstr()
     }
 
-    pub fn current_basic_info(&self) -> prjfs::PRJ_FILE_BASIC_INFO {
-        let mut info = prjfs::PRJ_FILE_BASIC_INFO::default();
+    pub fn current_basic_info(&self) -> prjfs::sys::PRJ_FILE_BASIC_INFO {
+        let mut info = prjfs::sys::PRJ_FILE_BASIC_INFO::default();
         info.IsDirectory = self.entries[self.index].is_directory as u8;
         info.FileSize = self.entries[self.index].size;
         info
@@ -81,7 +79,7 @@ impl DirInfo {
 
         self.entries.sort_by(|a, b| {
             let result = unsafe {
-                prjfs::PrjFileNameCompare(
+                prjfs::sys::PrjFileNameCompare(
                     a.filename.to_wstr().as_ptr(),
                     b.filename.to_wstr().as_ptr(),
                 )

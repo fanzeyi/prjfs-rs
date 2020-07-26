@@ -1,8 +1,9 @@
 [package]
 authors = ["Zeyi Fan <github@zeyi.fan>"]
 edition = "2018"
-name = "prjfs-rs"
+name = "prjfs"
 version = "0.1.0"
+
 [dependencies]
 anyhow = "*"
 env_logger = "*"
@@ -10,5 +11,6 @@ log = "*"
 winreg = "*"
 
 [dependencies.winapi]
-features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winreg", "winnt"]
-path = "../winapi-rs"
+features = ["projectedfslib", "fileapi", "winerror", "combaseapi", "handleapi", "errhandlingapi", "impl-default", "impl-debug", "winbase", "minwindef", "winnt"]
+git = "http://github.com/fanzeyi/winapi-rs.git"
+branch = "projectedfslib"

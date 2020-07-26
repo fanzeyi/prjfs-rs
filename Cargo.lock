@@ -91,7 +91,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
 
 [[package]]
-name = "prjfs-rs"
+name = "prjfs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -146,9 +146,10 @@ dependencies = [
 [[package]]
 name = "winapi"
 version = "0.3.8"
+source = "git+http://github.com/fanzeyi/winapi-rs.git?branch=projectedfslib#9f38802db749f29d078f18f7507a9b7589fe930f"
 dependencies = [
- "winapi-i686-pc-windows-gnu 0.4.0",
- "winapi-x86_64-pc-windows-gnu 0.4.0",
+ "winapi-i686-pc-windows-gnu 0.4.0 (git+http://github.com/fanzeyi/winapi-rs.git?branch=projectedfslib)",
+ "winapi-x86_64-pc-windows-gnu 0.4.0 (git+http://github.com/fanzeyi/winapi-rs.git?branch=projectedfslib)",
 ]
 
 [[package]]
@@ -164,6 +165,7 @@ dependencies = [
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
+source = "git+http://github.com/fanzeyi/winapi-rs.git?branch=projectedfslib#9f38802db749f29d078f18f7507a9b7589fe930f"
 
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
@@ -183,6 +185,7 @@ dependencies = [
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
+source = "git+http://github.com/fanzeyi/winapi-rs.git?branch=projectedfslib#9f38802db749f29d078f18f7507a9b7589fe930f"
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"

@@ -1,5 +1,8 @@
 use anyhow::{anyhow, Result};
 use log::{info, warn};
+use prjfs::conv::{RawWStrExt, WStrExt};
+use prjfs::guid::guid_to_bytes;
+use prjfs::ProviderT;
 use std::{collections::HashMap, ffi::OsString, sync::Mutex};
 use winapi::{
     shared::{
@@ -9,17 +12,14 @@ use winapi::{
     },
     um::{
         projectedfslib::{
-            self as prjfs, PRJ_CALLBACK_DATA, PRJ_DIR_ENTRY_BUFFER_HANDLE,
-            PRJ_NOTIFICATION_PARAMETERS,
+            PRJ_CALLBACK_DATA, PRJ_DIR_ENTRY_BUFFER_HANDLE, PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT,
+            PRJ_NOTIFICATION_PARAMETERS, PRJ_PLACEHOLDER_INFO,
         },
         winnt::{HRESULT, LPCWSTR, PCWSTR},
     },
 };
 
-use crate::conv::{RawWStrExt, WStrExt};
 use crate::dirinfo::DirInfo;
-use crate::guid::guid_to_bytes;
-use crate::provider::ProviderT;
 use crate::regop::RegOps;
 
 #[derive(Default)]
@@ -31,7 +31,7 @@ pub struct RegFs {
     state: Mutex<State>,
     regops: RegOps,
     readonly: bool,
-    context: prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT,
+    context: PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT,
 }
 
 impl RegFs {
@@ -46,13 +46,9 @@ impl RegFs {
 }
 
 impl RegFs {
-    fn write_placeholder_info(
-        &self,
-        filepath: LPCWSTR,
-        info: prjfs::PRJ_PLACEHOLDER_INFO,
-    ) -> HRESULT {
+    fn write_placeholder_info(&self, filepath: LPCWSTR, info: PRJ_PLACEHOLDER_INFO) -> HRESULT {
         unsafe {
-            prjfs::PrjWritePlaceholderInfo(
+            prjfs::sys::PrjWritePlaceholderInfo(
                 self.context,
                 filepath,
                 &info,
@@ -75,7 +71,7 @@ impl RegFs {
 
         for subkey in entries.subkeys {
             let result = unsafe {
-                prjfs::PrjFileNameMatch(
+                prjfs::sys::PrjFileNameMatch(
                     subkey.name.to_wstr().as_ptr(),
                     search_expression.to_wstr().as_ptr(),
                 )
@@ -88,7 +84,7 @@ impl RegFs {
 
         for value in entries.values {
             let result = unsafe {
-                prjfs::PrjFileNameMatch(
+                prjfs::sys::PrjFileNameMatch(
                     value.name.to_wstr().as_ptr(),
                     search_expression.to_wstr().as_ptr(),
                 )
@@ -104,7 +100,9 @@ impl RegFs {
 }
 
 impl ProviderT for RegFs {
-    fn get_context_space(&mut self) -> Option<*mut prjfs::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
+    fn get_context_space(
+        &mut self,
+    ) -> Option<*mut prjfs::sys::PRJ_NAMESPACE_VIRTUALIZATION_CONTEXT> {
         Some(&mut self.context)
     }
 
@@ -176,7 +174,7 @@ impl ProviderT for RegFs {
             None => return Ok(winerror::E_INVALIDARG),
         };
 
-        if data.Flags & prjfs::PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN != 0 {
+        if data.Flags & prjfs::sys::PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN != 0 {
             dirinfo.reset();
         }
 
@@ -190,7 +188,7 @@ impl ProviderT for RegFs {
 
         while dirinfo.current_is_valid() {
             let result = unsafe {
-                prjfs::PrjFillDirEntryBuffer(
+                prjfs::sys::PrjFillDirEntryBuffer(
                     dirinfo.current_file_name().as_ptr(),
                     &mut dirinfo.current_basic_info(),
                     handle,
@@ -228,7 +226,7 @@ impl ProviderT for RegFs {
             return Ok(winerror::HRESULT_FROM_WIN32(winerror::ERROR_FILE_NOT_FOUND));
         };
 
-        let mut placeholder = prjfs::PRJ_PLACEHOLDER_INFO::default();
+        let mut placeholder = prjfs::sys::PRJ_PLACEHOLDER_INFO::default();
         if let Some(size) = size {
             placeholder.FileBasicInfo.IsDirectory = false as u8;
             placeholder.FileBasicInfo.FileSize = size;
@@ -252,7 +250,8 @@ impl ProviderT for RegFs {
             path, process
         );
 
-        let rawbuffer = unsafe { prjfs::PrjAllocateAlignedBuffer(self.context, length as usize) };
+        let rawbuffer =
+            unsafe { prjfs::sys::PrjAllocateAlignedBuffer(self.context, length as usize) };
         if rawbuffer.is_null() {
             warn!("<---- get_file_data: Could not allocate write buffer.");
             return Ok(winerror::E_OUTOFMEMORY);
@@ -263,14 +262,20 @@ impl ProviderT for RegFs {
         let hr = if let Some(bytes) = self.regops.read_value(path.as_ref()) {
             buffer.copy_from_slice(&bytes);
             unsafe {
-                prjfs::PrjWriteFileData(self.context, &data.DataStreamId, rawbuffer, offset, length)
+                prjfs::sys::PrjWriteFileData(
+                    self.context,
+                    &data.DataStreamId,
+                    rawbuffer,
+                    offset,
+                    length,
+                )
             }
         } else {
             winerror::HRESULT_FROM_WIN32(winerror::ERROR_FILE_NOT_FOUND)
         };
 
         unsafe {
-            prjfs::PrjFreeAlignedBuffer(rawbuffer);
+            prjfs::sys::PrjFreeAlignedBuffer(rawbuffer);
         }
         info!("<---- get_file_data: return {:08x}", hr);
         Ok(hr)
@@ -280,7 +285,7 @@ impl ProviderT for RegFs {
         &self,
         data: &PRJ_CALLBACK_DATA,
         _is_directory: bool,
-        notification_type: prjfs::PRJ_NOTIFICATION,
+        notification_type: prjfs::sys::PRJ_NOTIFICATION,
         destination_file_name: PCWSTR,
         _parameters: &PRJ_NOTIFICATION_PARAMETERS,
     ) -> Result<HRESULT> {
@@ -293,17 +298,17 @@ impl ProviderT for RegFs {
         info!("--- Notification: 0x{:08x}", notification_type);
 
         match notification_type {
-            prjfs::PRJ_NOTIFICATION_FILE_OPENED => Ok(S_OK),
-            prjfs::PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_MODIFIED
-            | prjfs::PRJ_NOTIFICATION_FILE_OVERWRITTEN => {
+            prjfs::sys::PRJ_NOTIFICATION_FILE_OPENED => Ok(S_OK),
+            prjfs::sys::PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_MODIFIED
+            | prjfs::sys::PRJ_NOTIFICATION_FILE_OVERWRITTEN => {
                 info!(" ----- [{:?}] was modified", filepath);
                 Ok(S_OK)
             }
-            prjfs::PRJ_NOTIFY_NEW_FILE_CREATED => {
+            prjfs::sys::PRJ_NOTIFY_NEW_FILE_CREATED => {
                 info!(" ----- [{:?}] was created", filepath);
                 Ok(S_OK)
             }
-            prjfs::PRJ_NOTIFY_FILE_RENAMED => {
+            prjfs::sys::PRJ_NOTIFY_FILE_RENAMED => {
                 info!(
                     " ----- [{:?}] -> [{:?}]",
                     filepath,
@@ -311,11 +316,11 @@ impl ProviderT for RegFs {
                 );
                 Ok(S_OK)
             }
-            prjfs::PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED => {
+            prjfs::sys::PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED => {
                 info!(" ----- [{:?}] was deleted", filepath);
                 Ok(S_OK)
             }
-            prjfs::PRJ_NOTIFICATION_PRE_RENAME => {
+            prjfs::sys::PRJ_NOTIFICATION_PRE_RENAME => {
                 if self.readonly {
                     info!(" ----- rename request for [{:?}] was rejected", filepath);
                     Ok(HRESULT_FROM_WIN32(winerror::ERROR_ACCESS_DENIED))
@@ -324,7 +329,7 @@ impl ProviderT for RegFs {
                     Ok(S_OK)
                 }
             }
-            prjfs::PRJ_NOTIFICATION_PRE_DELETE => {
+            prjfs::sys::PRJ_NOTIFICATION_PRE_DELETE => {
                 if self.readonly {
                     info!(" ----- delete request for [{:?}] was rejected", filepath);
                     Ok(HRESULT_FROM_WIN32(winerror::ERROR_ACCESS_DENIED))
@@ -333,7 +338,7 @@ impl ProviderT for RegFs {
                     Ok(S_OK)
                 }
             }
-            prjfs::PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL => Ok(S_OK),
+            prjfs::sys::PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL => Ok(S_OK),
             t => {
                 warn!("notify: Unexpected notification: 0x{:08x}", t);
                 Ok(S_OK)
