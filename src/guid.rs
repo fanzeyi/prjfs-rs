@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use winapi::shared::guiddef::GUID;
 use winapi::um::combaseapi::CoCreateGuid;
 
@@ -7,21 +8,24 @@ pub fn create_guid() -> GUID {
     guid
 }
 
-pub fn guid_from_bytes(bytes: Vec<u8>) -> std::result::Result<GUID, std::option::NoneError> {
+pub fn guid_from_bytes(bytes: Vec<u8>) -> Result<GUID> {
+    if bytes.len() < 16 {
+        bail!("Not enough bytes for converting into a GUID");
+    }
     let mut guid = bytes.into_iter();
     Ok(GUID {
-        Data1: u32::from_be_bytes([guid.next()?, guid.next()?, guid.next()?, guid.next()?]),
-        Data2: u16::from_be_bytes([guid.next()?, guid.next()?]),
-        Data3: u16::from_be_bytes([guid.next()?, guid.next()?]),
+        Data1: u32::from_be_bytes([guid.next().unwrap(), guid.next().unwrap(), guid.next().unwrap(), guid.next().unwrap()]),
+        Data2: u16::from_be_bytes([guid.next().unwrap(), guid.next().unwrap()]),
+        Data3: u16::from_be_bytes([guid.next().unwrap(), guid.next().unwrap()]),
         Data4: [
-            guid.next()?,
-            guid.next()?,
-            guid.next()?,
-            guid.next()?,
-            guid.next()?,
-            guid.next()?,
-            guid.next()?,
-            guid.next()?,
+            guid.next().unwrap(),
+            guid.next().unwrap(),
+            guid.next().unwrap(),
+            guid.next().unwrap(),
+            guid.next().unwrap(),
+            guid.next().unwrap(),
+            guid.next().unwrap(),
+            guid.next().unwrap(),
         ],
     })
 }

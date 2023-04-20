@@ -1,4 +1,3 @@
-#![feature(try_trait, slice_concat_trait)]
 use anyhow::Result;
 use prjfs::provider::{Provider, ProviderT};
 use prjfs::{NotificationType, OptionBuilder};
