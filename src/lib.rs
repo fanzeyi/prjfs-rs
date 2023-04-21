@@ -1,5 +1,3 @@
-#![feature(try_trait)]
-
 pub mod conv;
 pub mod guid;
 pub mod option;

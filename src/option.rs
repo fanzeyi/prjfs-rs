@@ -22,7 +22,7 @@ bitflags::bitflags! {
 }
 
 impl NotificationType {
-    fn into_raw(self) -> crate::sys::PRJ_NOTIFY_TYPES {
+    fn into_raw(&self) -> crate::sys::PRJ_NOTIFY_TYPES {
         let mut raw = crate::sys::PRJ_NOTIFY_TYPES::default();
 
         if self.contains(NotificationType::NONE) {
